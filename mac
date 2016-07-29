@@ -66,15 +66,6 @@ case "$SHELL" in
     ;;
 esac
 
-gem_install_or_update() {
-  if gem list "$1" --installed > /dev/null; then
-    gem update "$@"
-  else
-    gem install "$@"
-    rbenv rehash
-  fi
-}
-
 if ! command -v brew >/dev/null; then
   fancy_echo "Installing Homebrew ..."
     curl -fsS \
@@ -93,70 +84,85 @@ if brew list | grep -Fq brew-cask; then
   brew uninstall --force brew-cask
 fi
 
+DOCKER_VERSION=""
+
+if command -v docker; then
+  DOCKER_VERSION='$(docker -v)'
+fi
+
+# Kill Docker Toolbox
+case "$DOCKER_VERSION" in
+  Docker\ version\ 1.11.*)
+    echo "Uninstalling Docker Toolbox"
+    docker-machine rm default
+    rm /usr/local/bin/docker
+    rm /usr/local/bin/docker-compose
+    rm /usr/local/bin/docker-machine
+
+    if [ -d "$HOME/.docker" ]; then
+      rm -rf "$HOME/.docker"
+    fi
+
+    if [ -d "/Applications/Docker" ]; then
+      rm -rf "/Applications/Docker"
+    fi
+    ;;
+esac
+
 fancy_echo "Updating Homebrew formulae ..."
 brew update
 brew bundle --file=- <<EOF
 tap "thoughtbot/formulae"
-tap "homebrew/services"
+tap "homebrew/versions"
+tap "homebrew/dupes"
+tap "homebrew/homebrew-php"
 
 # Unix
-brew "ctags"
 brew "git"
-brew "openssl"
-brew "rcm"
-brew "reattach-to-user-namespace"
-brew "the_silver_searcher"
-brew "tmux"
+brew "git-flow"
+brew "htop-osx"
 brew "vim"
+brew "bash-completion"
 brew "zsh"
-
-# Heroku
-brew "heroku-toolbelt"
-brew "parity"
-
-# GitHub
-brew "hub"
-
-# Image manipulation
-brew "imagemagick"
-
-# Testing
-brew "qt"
+brew "fish"
+brew "tmux"
+brew "wget"
 
 # Programming languages
-brew "libyaml" # should come after openssl
-brew "node"
-brew "rbenv"
-brew "ruby-build"
+brew "node4-lts"
 
-# Databases
-brew "postgres", restart_service: true
-brew "redis", restart_service: true
+# Misc
+brew "brew-php-switcher"
+brew "nvm"
+brew "mcrypt"
+
+# Apps
+brew "kdiff3"
+cask "atom"
+cask "sourcetree"
 EOF
 
-fancy_echo "Configuring Ruby ..."
-find_latest_ruby() {
-  rbenv install -l | grep -v - | tail -1 | sed -e 's/^ *//'
-}
+brew install php56 --with-mysql --with-pqsql --with-intl
+brew-php-switcher -s 56
 
-ruby_version="$(find_latest_ruby)"
-# shellcheck disable=SC2016
-append_to_zshrc 'eval "$(rbenv init - --no-rehash)"' 1
-eval "$(rbenv init -)"
-
-if ! rbenv versions | grep -Fq "$ruby_version"; then
-  RUBY_CONFIGURE_OPTS=--with-openssl-dir=/usr/local/opt/openssl rbenv install -s "$ruby_version"
+# Setup for investability
+if [ ! -d "$HOME/Dev/" ]; then
+  mkdir "$HOME/Dev"
 fi
 
-rbenv global "$ruby_version"
-rbenv shell "$ruby_version"
-gem update --system
-gem_install_or_update 'bundler'
-number_of_cores=$(sysctl -n hw.ncpu)
-bundle config --global jobs $((number_of_cores - 1))
+IA_HOSTS_ENTRY="127.0.0.1 i2.local i2local_mysql-investability i2local_redis_1 i2local_elasticsearch_1"
+
+if [ -n "$(grep -q '$IA_HOSTS_ENTRY' /etc/hosts)" ]; then
+  echo "Adding $IA_HOSTS_ENTRY to your /etc/hosts file"
+  sudo -- sh -c -e "echo '$IA_HOSTS_ENTRY' >> /etc/hosts";
+fi
 
 if [ -f "$HOME/.laptop.local" ]; then
   fancy_echo "Running your customizations from ~/.laptop.local ..."
   # shellcheck disable=SC1090
   . "$HOME/.laptop.local"
+fi
+
+if ! command -v docker >/dev/null; then
+  nohup /Applications/Docker.app/Contents/MacOS/Docker >/dev/null
 fi
