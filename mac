@@ -98,8 +98,6 @@ brew "mcrypt"
 
 # Apps
 brew "kdiff3"
-cask "atom"
-cask "sourcetree"
 EOF
 
 brew install php56 --with-mysql --with-pqsql --with-intl
